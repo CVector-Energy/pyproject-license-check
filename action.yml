@@ -88,6 +88,31 @@ runs:
           FROM_SPEC="licensecheck==${LICENSECHECK_VERSION}"
         fi
 
+        # Ensure licensecheck finds a config file supplying a `tool` table.
+        #
+        # licensecheck reads config from licensecheck.json, licensecheck.toml,
+        # setup.cfg and pyproject.toml. If none of them provides a `tool` table,
+        # `config.get("tool", default={})` returns a plain dict and the chained
+        # `.get("licensecheck", default=...)` raises:
+        #
+        #   TypeError: dict.get() takes no keyword arguments
+        #
+        # That makes the action fail outright in any repo that has no top-level
+        # pyproject.toml, or whose pyproject.toml has no [tool] table -- a
+        # crash rather than a license verdict. Writing a stub config avoids it.
+        #
+        # The stub is deliberately empty. Config files are merged, so a repo's
+        # own [tool.licensecheck] settings in pyproject.toml still apply, and
+        # skip/ignore options are passed on the command line below. Setting
+        # requirements_paths here would override the paths discovered by `find`.
+        STUB_CONFIG=""
+        if [[ ! -f licensecheck.toml && ! -f licensecheck.json ]]; then
+          STUB_CONFIG="licensecheck.toml"
+          printf '[tool.licensecheck]\n' > "$STUB_CONFIG"
+          # shellcheck disable=SC2064
+          trap "rm -f '$STUB_CONFIG'" EXIT
+        fi
+
         # Find and check requirements files
         find ${{ inputs.requirements-paths }} \( -name 'pyproject.toml' -o -name 'requirements.txt' \) -print0 | \
           xargs -0 -r uvx --from "$FROM_SPEC" licensecheck --zero \
