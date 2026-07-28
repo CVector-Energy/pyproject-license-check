@@ -7,8 +7,7 @@ This action:
 2. Runs `licensecheck` to validate dependency licenses
 3. Fails if any dependencies have incompatible or unknown licenses
 
-It works in repositories that have no top-level `pyproject.toml` — for example, a
-repo that only contains `requirements.txt` files. See
+It works in repositories that have no top-level `pyproject.toml` — for example, a repo that only contains `requirements.txt` files. See
 [Repositories without a root `pyproject.toml`](#repositories-without-a-root-pyprojecttoml).
 
 ## Inputs
