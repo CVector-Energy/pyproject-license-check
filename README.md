@@ -7,15 +7,14 @@ This action:
 2. Runs `licensecheck` to validate dependency licenses
 3. Fails if any dependencies have incompatible or unknown licenses
 
-It works in repositories that have no top-level `pyproject.toml` — for example, a repo that only contains `requirements.txt` files. See
-[Repositories without a root `pyproject.toml`](#repositories-without-a-root-pyprojecttoml).
+It works in repositories that have no top-level `pyproject.toml` — for example, a repo that only contains `requirements.txt` files.
 
 ## Inputs
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `uv-version` | uv version to use | No | `7.1.3` |
-| `licensecheck-version` | licensecheck version to use | No | FHPythonUtils/LicenseCheck#137 |
+| `licensecheck-version` | licensecheck version to use. A bare version resolves from PyPI; a `git+...` value is installed from source | No | `2026.0.8` |
 | `skip-dependencies` | Space-separated list of dependencies to skip | No | `wrapt` (BSD-2-Clause, see [issue](https://github.com/GrahamDumpleton/wrapt/issues/298)) |
 | `ignore-licenses` | Space-separated list of license types to ignore | No | `MPL` |
 | `requirements-paths` | Paths to search for requirements files | No | `.` |
@@ -70,30 +69,6 @@ steps:
     with:
       requirements-paths: "./backend ./frontend"
 ```
-
-### Repositories without a root `pyproject.toml`
-
-No configuration needed — this works out of the box.
-
-Under the hood, `licensecheck` reads its configuration from `licensecheck.json`,
-`licensecheck.toml`, `setup.cfg` and `pyproject.toml`. At the pinned version, if
-none of those supplies a `[tool]` table it crashes instead of reporting a verdict:
-
-```
-TypeError: dict.get() takes no keyword arguments
-```
-
-This affects any repo with no top-level `pyproject.toml` (one holding only
-`requirements.txt` files, say), and also a repo whose `pyproject.toml` has no
-`[tool]` table at all.
-
-To avoid it, the action writes an empty `licensecheck.toml` stub into the
-workspace root when neither `licensecheck.toml` nor `licensecheck.json` is
-already present, and removes it when the step finishes. The stub is empty by
-design: configuration files are merged, so your own `[tool.licensecheck]`
-settings in `pyproject.toml` still apply.
-
-If you prefer to commit your own `licensecheck.toml`, the action leaves it alone.
 
 ### With private dependencies
 
