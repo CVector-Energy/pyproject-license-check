@@ -4,8 +4,15 @@ Check Python project dependencies for license compliance using [licensecheck](ht
 
 This action:
 1. Finds all `pyproject.toml` and `requirements.txt` files in your project
-2. Runs `licensecheck` to validate dependency licenses
-3. Fails if any dependencies have incompatible or unknown licenses
+2. Converts them to sanitized temporary requirements files
+3. Runs `licensecheck` to validate dependency licenses
+4. Fails if any dependencies have incompatible or unknown licenses
+
+For `pyproject.toml` files, the action checks direct `[project].dependencies`
+and `[project.optional-dependencies]` entries. Local uv path/workspace sources
+are skipped so internal editable packages do not get passed to `licensecheck` as
+pip path syntax. The action does not expand pyprojects to the full transitive
+dependency graph.
 
 It works in repositories that have no top-level `pyproject.toml` — for example, a repo that only contains `requirements.txt` files.
 
