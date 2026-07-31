@@ -171,10 +171,145 @@ runs:
           exit 0
         fi
 
-        uvx --from "$FROM_SPEC" licensecheck --zero \
+        uvx --from "$FROM_SPEC" python3 - \
+          --zero \
           "${SKIP_ARGS[@]}" \
           "${IGNORE_ARGS[@]}" \
-          --requirements-paths "${SANITIZED_PATHS[@]}"
+          --requirements-paths "${SANITIZED_PATHS[@]}" <<'PY'
+        import argparse
+        import fnmatch
+        import sys
+        import tomllib
+        from pathlib import Path
+
+        from licensecheck import license_matrix
+        from packaging.requirements import InvalidRequirement, Requirement
+        from packaging.utils import canonicalize_name
+
+        try:
+            from licensecheck.models.constants import JOINS, UNKNOWN
+            from licensecheck.packageinforesolver import PackageInfoManager, ProjectMetadata
+            from licensecheck.models.packageinfo import PackageInfo
+        except ImportError:
+            from licensecheck import packageinfo as legacy_packageinfo
+            from licensecheck import types as legacy_types
+
+            JOINS = legacy_types.JOINS
+            UNKNOWN = legacy_types.UNKNOWN
+            PackageInfo = legacy_types.PackageInfo
+            PackageInfoManager = legacy_packageinfo.PackageInfoManager
+            ProjectMetadata = legacy_packageinfo.ProjectMetadata
+
+
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--zero", action="store_true")
+        parser.add_argument("--skip-dependencies", action="append", default=[])
+        parser.add_argument("--ignore-licenses", action="append", default=[])
+        parser.add_argument("--requirements-paths", nargs="+", required=True)
+        args = parser.parse_args()
+
+        config = {}
+        if Path("pyproject.toml").exists():
+            config = (
+                tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+                .get("tool", {})
+                .get("licensecheck", {})
+            )
+
+        skip_packages = {canonicalize_name(name) for name in args.skip_dependencies}
+        ignore_packages = [pattern.upper() for pattern in config.get("ignore_packages", [])]
+        ignore_license_names = [
+            name.upper()
+            for name in [*config.get("ignore_licenses", []), *args.ignore_licenses]
+        ]
+        ignore_license_types = license_matrix.licenseType(
+            JOINS.join(ignore_license_names),
+            ignore_license_names,
+        )
+        project_license_types = license_matrix.licenseType(ProjectMetadata.get_license())
+        project_license = next(iter(project_license_types))
+
+        requirements = {}
+        for requirements_path in args.requirements_paths:
+            with open(requirements_path, encoding="utf-8") as file:
+                for line_number, raw_line in enumerate(file, start=1):
+                    line = raw_line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    try:
+                        requirement = Requirement(line)
+                    except InvalidRequirement as error:
+                        print(
+                            f"Invalid requirement in {requirements_path}:{line_number}: {line}",
+                            file=sys.stderr,
+                        )
+                        raise SystemExit(2) from error
+
+                    name = canonicalize_name(requirement.name)
+                    if name in skip_packages:
+                        continue
+                    requirements[name] = requirement
+
+        manager = PackageInfoManager()
+        packages = []
+        incompatible = []
+        errors = []
+        for name in sorted(requirements):
+            requirement = requirements[name]
+            if hasattr(manager, "_get_package_info"):
+                package = manager._get_package_info(requirement)
+            else:
+                package = manager.get_package_info(PackageInfo(name=name))
+            package_name = package.name.upper()
+            ignored_package = any(
+                fnmatch.fnmatch(package_name, pattern)
+                for pattern in ignore_packages
+            )
+            if ignored_package:
+                package.licenseCompat = True
+            else:
+                package_license_types = license_matrix.licenseType(
+                    str(package.license or ""),
+                    ignore_license_names,
+                )
+                try:
+                    package.licenseCompat = license_matrix.depCompatWMyLice(
+                        project_license,
+                        package_license_types,
+                        ignore_license_types,
+                    )
+                except (IndexError, KeyError):
+                    print(
+                        f"Could not compare license for {package.name}: {package.license}",
+                        file=sys.stderr,
+                    )
+                    package.licenseCompat = False
+            packages.append(package)
+            if package.errorCode and not ignored_package:
+                errors.append(package)
+            if not package.licenseCompat and not any(
+                fnmatch.fnmatch(package_name, pattern.upper())
+                for pattern in args.skip_dependencies
+            ):
+                incompatible.append(package)
+
+        if errors:
+            print("Packages with missing metadata:")
+            for package in errors:
+                print(f"  - {package.name}")
+
+        if packages:
+            print("Checked direct packages:")
+            for package in packages:
+                status = "OK" if package.licenseCompat else "FAIL"
+                license_text = package.license or UNKNOWN
+                print(f"  {status} {package.name}: {license_text}")
+        else:
+            print("No direct packages to check.")
+
+        if args.zero and incompatible:
+            raise SystemExit(1)
+        PY
 
 branding:
   icon: shield
