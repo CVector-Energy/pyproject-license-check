@@ -23,6 +23,10 @@ inputs:
     description: Paths to search for requirements files (pyproject.toml, requirements.txt)
     required: false
     default: "."
+  allow-no-packages:
+    description: Treat LicenseCheck's NO_PACKAGES result as success
+    required: false
+    default: "false"
   app-id:
     description: GitHub App ID for accessing private repos (optional)
     required: false
@@ -62,6 +66,8 @@ runs:
 
     - name: Run license check
       shell: bash
+      env:
+        ALLOW_NO_PACKAGES: ${{ inputs.allow-no-packages }}
       run: |
         # Build skip dependencies array if provided
         SKIP_ARGS=()
@@ -89,12 +95,28 @@ runs:
           FROM_SPEC="licensecheck==${LICENSECHECK_VERSION}"
         fi
 
-        # Find and check requirements files
-        find ${{ inputs.requirements-paths }} \( -name 'pyproject.toml' -o -name 'requirements.txt' \) -print0 | \
-          xargs -0 -r uvx --from "$FROM_SPEC" licensecheck --zero \
-            "${SKIP_ARGS[@]}" \
-            "${IGNORE_ARGS[@]}" \
-            --requirements-paths
+        mapfile -d '' REQUIREMENTS_FILES < <(
+          find ${{ inputs.requirements-paths }} \( -name 'pyproject.toml' -o -name 'requirements.txt' \) -print0
+        )
+        if [[ ${#REQUIREMENTS_FILES[@]} -eq 0 ]]; then
+          echo "No Python requirement files found."
+          exit 0
+        fi
+
+        set +e
+        uvx --from "$FROM_SPEC" licensecheck --zero \
+          "${SKIP_ARGS[@]}" \
+          "${IGNORE_ARGS[@]}" \
+          --requirements-paths "${REQUIREMENTS_FILES[@]}"
+        LICENSECHECK_STATUS=$?
+        set -e
+
+        if [[ "$LICENSECHECK_STATUS" -eq 3 && "$ALLOW_NO_PACKAGES" == "true" ]]; then
+          echo "::notice::No dependency packages found; passing because allow-no-packages is enabled."
+          exit 0
+        fi
+
+        exit "$LICENSECHECK_STATUS"
 
 branding:
   icon: shield

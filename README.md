@@ -18,6 +18,7 @@ It works in repositories that have no top-level `pyproject.toml` — for example
 | `skip-dependencies` | Space-separated list of dependencies to skip | No | `wrapt` (BSD-2-Clause, see [issue](https://github.com/GrahamDumpleton/wrapt/issues/298)) |
 | `ignore-licenses` | Space-separated list of license types to ignore | No | `MPL` |
 | `requirements-paths` | Paths to search for requirements files | No | `.` |
+| `allow-no-packages` | Treat LicenseCheck's `NO_PACKAGES` result as success | No | `false` |
 | `app-id` | GitHub App ID for accessing private repos | No | `""` |
 | `app-private-key` | GitHub App private key for accessing private repos | No | `""` |
 | `repository-owner` | Repository owner for GitHub App token | No | Current repo owner |
@@ -68,6 +69,21 @@ steps:
     uses: CVector-Energy/license-check-python@main
     with:
       requirements-paths: "./backend ./frontend"
+```
+
+### Allow projects with no dependencies
+
+LicenseCheck normally returns exit code 3 when it finds requirement files but no dependency packages. Data-only or standard-library-only projects can accept that result explicitly:
+
+```yaml
+steps:
+  - name: Checkout
+    uses: actions/checkout@v6
+
+  - name: Check licenses
+    uses: CVector-Energy/license-check-python@main
+    with:
+      allow-no-packages: true
 ```
 
 ### With private dependencies
