@@ -23,6 +23,10 @@ inputs:
     description: Space-separated list of exact LicenseRef identifiers to accept
     required: false
     default: ""
+  license-overrides:
+    description: TOML entries and comments for exact-version license overrides
+    required: false
+    default: ""
   requirements-paths:
     description: Paths to search for requirements files (pyproject.toml, requirements.txt)
     required: false
@@ -54,14 +58,16 @@ runs:
       with:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.app-private-key }}
-        owner: ${{ inputs.repository-owner || github.repository_owner }}
+        owner: ${{ inputs.repository-owner || github.repository_owner }} # zizmor: ignore[github-app] dependencies may span organization repositories
         permission-contents: read
 
     - name: Configure git to use app token for private repos
       if: steps.app.outcome == 'success'
       shell: bash
+      env:
+        APP_TOKEN: ${{ steps.app.outputs.token }}
       run: |
-        git config --global url."https://x-access-token:${{ steps.app.outputs.token }}@github.com/".insteadOf "https://github.com/"
+        git config --global url."https://x-access-token:${APP_TOKEN}@github.com/".insteadOf "https://github.com/"
 
     - name: Set up uv
       uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
@@ -72,11 +78,17 @@ runs:
       shell: bash
       env:
         ALLOW_NO_PACKAGES: ${{ inputs.allow-no-packages }}
+        ALLOWED_LICENSE_REFERENCES: ${{ inputs.allowed-license-references }}
+        IGNORE_LICENSES: ${{ inputs.ignore-licenses }}
+        LICENSE_OVERRIDES: ${{ inputs.license-overrides }}
+        LICENSECHECK_VERSION_INPUT: ${{ inputs.licensecheck-version }}
+        REQUIREMENTS_PATHS_INPUT: ${{ inputs.requirements-paths }}
+        SKIP_DEPENDENCIES: ${{ inputs.skip-dependencies }}
       run: |
         # Build skip dependencies array if provided
         SKIP_ARGS=()
-        if [[ -n "${{ inputs.skip-dependencies }}" ]]; then
-          IFS=' ' read -ra SKIP_DEPS <<< "${{ inputs.skip-dependencies }}"
+        if [[ -n "$SKIP_DEPENDENCIES" ]]; then
+          IFS=' ' read -ra SKIP_DEPS <<< "$SKIP_DEPENDENCIES"
           for dep in "${SKIP_DEPS[@]}"; do
             SKIP_ARGS+=(--skip-dependencies "$dep")
           done
@@ -84,30 +96,40 @@ runs:
 
         # Build ignore licenses args if provided
         IGNORE_ARGS=()
-        if [[ -n "${{ inputs.ignore-licenses }}" ]]; then
-          IFS=' ' read -ra IGNORE_LICENSES <<< "${{ inputs.ignore-licenses }}"
-          for license in "${IGNORE_LICENSES[@]}"; do
+        if [[ -n "$IGNORE_LICENSES" ]]; then
+          IFS=' ' read -ra IGNORED_LICENSES <<< "$IGNORE_LICENSES"
+          for license in "${IGNORED_LICENSES[@]}"; do
             IGNORE_ARGS+=(--ignore-licenses "$license")
           done
         fi
 
         # Build exact custom license-reference args if provided
         LICENSE_REF_ARGS=()
-        if [[ -n "${{ inputs.allowed-license-references }}" ]]; then
-          IFS=' ' read -ra ALLOWED_LICENSE_REFS <<< "${{ inputs.allowed-license-references }}"
+        if [[ -n "$ALLOWED_LICENSE_REFERENCES" ]]; then
+          IFS=' ' read -ra ALLOWED_LICENSE_REFS <<< "$ALLOWED_LICENSE_REFERENCES"
           LICENSE_REF_ARGS=(--allowed-license-references "${ALLOWED_LICENSE_REFS[@]}")
         fi
 
+        if [[ -n "$LICENSE_OVERRIDES" ]]; then
+          if [[ -e licensecheck.toml ]]; then
+            echo "::error::license-overrides cannot be used when licensecheck.toml already exists"
+            exit 1
+          fi
+          printf '[tool.licensecheck.license_overrides]\n%s\n' "$LICENSE_OVERRIDES" > licensecheck.toml
+          trap 'rm -f licensecheck.toml' EXIT
+        fi
+
         # Determine uvx --from spec: git URLs use @, PyPI versions use ==
-        LICENSECHECK_VERSION="${{ inputs.licensecheck-version }}"
+        LICENSECHECK_VERSION="$LICENSECHECK_VERSION_INPUT"
         if [[ "$LICENSECHECK_VERSION" == git+* ]]; then
           FROM_SPEC="licensecheck @ ${LICENSECHECK_VERSION}"
         else
           FROM_SPEC="licensecheck==${LICENSECHECK_VERSION}"
         fi
 
+        IFS=' ' read -ra REQUIREMENTS_PATHS <<< "$REQUIREMENTS_PATHS_INPUT"
         mapfile -d '' REQUIREMENTS_FILES < <(
-          find ${{ inputs.requirements-paths }} \( -name 'pyproject.toml' -o -name 'requirements.txt' \) -print0
+          find "${REQUIREMENTS_PATHS[@]}" \( -name 'pyproject.toml' -o -name 'requirements.txt' \) -print0
         )
         if [[ ${#REQUIREMENTS_FILES[@]} -eq 0 ]]; then
           echo "No Python requirement files found."
