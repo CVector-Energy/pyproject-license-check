@@ -17,6 +17,7 @@ It works in repositories that have no top-level `pyproject.toml` — for example
 | `licensecheck-version` | licensecheck version to use. A bare version resolves from PyPI; a `git+...` value is installed from source | No | `2026.0.8` |
 | `skip-dependencies` | Space-separated list of dependencies to skip | No | `wrapt` (BSD-2-Clause, see [issue](https://github.com/GrahamDumpleton/wrapt/issues/298)) |
 | `ignore-licenses` | Space-separated list of license types to ignore | No | `MPL` |
+| `allowed-license-refs` | Space-separated list of exact `LicenseRef-*` identifiers to accept | No | `""` |
 | `requirements-paths` | Paths to search for requirements files | No | `.` |
 | `allow-no-packages` | Treat LicenseCheck's `NO_PACKAGES` result as success | No | `false` |
 | `app-id` | GitHub App ID for accessing private repos | No | `""` |
@@ -56,6 +57,21 @@ steps:
     uses: CVector-Energy/license-check-python@main
     with:
       ignore-licenses: "MPL BSD-3-Clause"
+```
+
+### Allow exact custom license references
+
+Unlike `ignore-licenses`, this input compares the raw custom license identifier and does not allow the generic proprietary-license category.
+
+```yaml
+steps:
+  - name: Checkout
+    uses: actions/checkout@v6
+
+  - name: Check licenses
+    uses: CVector-Energy/license-check-python@main
+    with:
+      allowed-license-refs: "LicenseRef-NVIDIA-Proprietary"
 ```
 
 ### Check specific directories

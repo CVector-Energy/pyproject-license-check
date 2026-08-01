@@ -19,6 +19,10 @@ inputs:
     description: Space-separated list of license types to ignore
     required: false
     default: "MPL"
+  allowed-license-refs:
+    description: Space-separated list of exact LicenseRef identifiers to accept
+    required: false
+    default: ""
   requirements-paths:
     description: Paths to search for requirements files (pyproject.toml, requirements.txt)
     required: false
@@ -87,6 +91,15 @@ runs:
           done
         fi
 
+        # Build exact custom license-reference args if provided
+        LICENSE_REF_ARGS=()
+        if [[ -n "${{ inputs.allowed-license-refs }}" ]]; then
+          IFS=' ' read -ra ALLOWED_LICENSE_REFS <<< "${{ inputs.allowed-license-refs }}"
+          for license_ref in "${ALLOWED_LICENSE_REFS[@]}"; do
+            LICENSE_REF_ARGS+=(--allowed-license-refs "$license_ref")
+          done
+        fi
+
         # Determine uvx --from spec: git URLs use @, PyPI versions use ==
         LICENSECHECK_VERSION="${{ inputs.licensecheck-version }}"
         if [[ "$LICENSECHECK_VERSION" == git+* ]]; then
@@ -107,6 +120,7 @@ runs:
         uvx --from "$FROM_SPEC" licensecheck --zero \
           "${SKIP_ARGS[@]}" \
           "${IGNORE_ARGS[@]}" \
+          "${LICENSE_REF_ARGS[@]}" \
           --requirements-paths "${REQUIREMENTS_FILES[@]}"
         LICENSECHECK_STATUS=$?
         set -e
