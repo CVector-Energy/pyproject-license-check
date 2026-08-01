@@ -18,6 +18,7 @@ It works in repositories that have no top-level `pyproject.toml` — for example
 | `skip-dependencies` | Space-separated list of dependencies to skip | No | `wrapt` (BSD-2-Clause, see [issue](https://github.com/GrahamDumpleton/wrapt/issues/298)) |
 | `ignore-licenses` | Space-separated list of license types to ignore | No | `MPL` |
 | `allowed-license-references` | Space-separated list of exact `LicenseRef-*` identifiers to accept | No | `""` |
+| `license-overrides` | Multiline TOML entries and comments assigning reviewed licenses to exact package versions | No | `""` |
 | `requirements-paths` | Paths to search for requirements files | No | `.` |
 | `allow-no-packages` | Treat LicenseCheck's `NO_PACKAGES` result as success | No | `false` |
 | `app-id` | GitHub App ID for accessing private repos | No | `""` |
@@ -73,6 +74,28 @@ steps:
     with:
       allowed-license-references: "LicenseRef-NVIDIA-Proprietary"
 ```
+
+### Override defective package metadata
+
+Overrides remain subject to LicenseCheck's normal license policy. Keys must use exact versions, and comments can document how each license was verified.
+
+```yaml
+steps:
+  - name: Checkout
+    uses: actions/checkout@v6
+
+  - name: Check licenses
+    uses: CVector-Energy/license-check-python@main
+    with:
+      allowed-license-references: "LicenseRef-NVIDIA-Proprietary"
+      license-overrides: |
+        # BSD-3-Clause; verified from the license text in the 3.2.0 wheel.
+        "us==3.2.0" = "BSD-3-Clause"
+        # CUDA Toolkit EULA; reviewed for this exact artifact.
+        "cuda-toolkit==13.0.3.0" = "LicenseRef-NVIDIA-Proprietary"
+```
+
+The action writes these entries verbatim to a temporary `licensecheck.toml` and removes it when the check finishes. It fails instead of overwriting a repository-owned `licensecheck.toml`; repositories using that file should keep their overrides there.
 
 ### Check specific directories
 
