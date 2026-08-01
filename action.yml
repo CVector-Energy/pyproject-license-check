@@ -95,9 +95,7 @@ runs:
         LICENSE_REF_ARGS=()
         if [[ -n "${{ inputs.allowed-license-references }}" ]]; then
           IFS=' ' read -ra ALLOWED_LICENSE_REFS <<< "${{ inputs.allowed-license-references }}"
-          for license_ref in "${ALLOWED_LICENSE_REFS[@]}"; do
-            LICENSE_REF_ARGS+=(--allowed-license-references "$license_ref")
-          done
+          LICENSE_REF_ARGS=(--allowed-license-references "${ALLOWED_LICENSE_REFS[@]}")
         fi
 
         # Determine uvx --from spec: git URLs use @, PyPI versions use ==
