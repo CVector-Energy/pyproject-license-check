@@ -19,7 +19,7 @@ inputs:
     description: Space-separated list of license types to ignore
     required: false
     default: "MPL"
-  allowed-license-refs:
+  allowed-license-references:
     description: Space-separated list of exact LicenseRef identifiers to accept
     required: false
     default: ""
@@ -93,10 +93,10 @@ runs:
 
         # Build exact custom license-reference args if provided
         LICENSE_REF_ARGS=()
-        if [[ -n "${{ inputs.allowed-license-refs }}" ]]; then
-          IFS=' ' read -ra ALLOWED_LICENSE_REFS <<< "${{ inputs.allowed-license-refs }}"
+        if [[ -n "${{ inputs.allowed-license-references }}" ]]; then
+          IFS=' ' read -ra ALLOWED_LICENSE_REFS <<< "${{ inputs.allowed-license-references }}"
           for license_ref in "${ALLOWED_LICENSE_REFS[@]}"; do
-            LICENSE_REF_ARGS+=(--allowed-license-refs "$license_ref")
+            LICENSE_REF_ARGS+=(--allowed-license-references "$license_ref")
           done
         fi
 
